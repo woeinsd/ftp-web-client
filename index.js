@@ -8,7 +8,7 @@ const express = require("express"),
 
 const server = express();
 
-server.use(express.bodyParser({ limit: "50mb" }));
+server.use(express.bodyParser({ limit: "500mb" }));
 server.engine("html", require("ejs").renderFile);
 server.use(express.static(__dirname + "/public"));
 server.use(cookieParser("secret12"));

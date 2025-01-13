@@ -14,10 +14,12 @@
     </ul>
   </div>
 
+  
+
   {{!-- 操作栏 --}}
   <div style="margin-bottom:20px; line-height: 2;">
     <span class="btn btn-xs btn-warning back" style="margin-right: 10px;">
-      <i class="fa fa-arrow-left"></i> 返回上一级
+      <i class="fa fa-arrow-left"></i> 返回上一级 
     </span>
     <span class="btn btn-xs btn-warning refresh" style="margin-right: 10px;">
       <i class="fa fa-refresh"></i> 刷新文件夹
@@ -27,6 +29,9 @@
     </span>
     <span class="btn btn-xs btn-warning newFile" style="margin-right: 10px;">
       <i class="fa fa-file"></i> 新建文件
+    </span>
+    <span class="btn btn-xs btn-warning desktop" style="margin-right: 10px;">
+      <i class="fa fa-desktop"></i> 桌面
     </span>
     <span id="fileselector">
       <form id='uplodadfileform' style="display:inline">
@@ -44,9 +49,10 @@
       {{size_info.file}} 个文件和 {{size_info.dir}} 个文件夹
     </label>
   </div>
-
+{{!-- 进度条容器 --}}
+  <div id="progressBarContainer" style="margin-bottom:20px;"></div>
   {{!-- 文件列表 --}}
-  <div style='overflow-x:scroll'>
+  <div style='overflow-x:scroll' id="fileDropArea" style="border: 2px dashed #ccc; padding: 20px;">
     <table class="table striped" {{#if isMobile}}style='width:800px' {{/if}}>
       {{!-- 表头 --}}
       <thead>
@@ -58,7 +64,8 @@
         </tr>
       </thead>
       {{!-- 表格主体 --}}
-      <tbody>
+      <tbody  >
+    
         {{#each ftpdirlist}}
         <tr class="list-row" data-type="{{#when type 'eq' 'Directory'}}folder{{else}}file{{/when}}" data-name='{{name}}'>
           {{!-- 名称 --}}

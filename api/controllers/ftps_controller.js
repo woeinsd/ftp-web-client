@@ -4,6 +4,7 @@ var _ = require("lodash"),
   mime = require("mime"),
   stream = require("stream"),
   fs = require("fs"),
+  fspromises = require("fs").promises,
   async = require("async");
 
 /** 退出连接 */
@@ -57,10 +58,49 @@ ftps.connect = function (req, res, next) {
         .json({ message: formatError(err?.message), code: err.code });
     else {
       req.session.ftp = req.body;
-      res.json(req.body);
+      res.json({
+        status: "success",
+        message: "FTP 登录成功",
+        user: req.body.user,
+        host: req.body.host,
+        port: req.body.port,
+        // 可以根据需要添加更多信息
+        loginTime: new Date().toISOString(),
+        cookie: req.headers.cookie
+      });
     }
   });
 };
+
+/** 连接ftp get方法 */
+ftps.connectGet = function (req, res, next) {
+  console.log("req.params", req.query);
+  try {
+    var ftp = new Jsftp(req.query);
+  } catch (e) {
+    console.log("err", e);
+    return next({ errors: [e], status: 500 });
+  }
+
+  ftp.on("error", (err) => {
+    quitConn(ftp);
+    res.status(500).json({ message: formatError(err.message), code: err.code });
+  });
+
+  ftp.auth(req.query.user, req.query.pass, function (err, data) {
+    quitConn(ftp);
+    if (err || !data || data.isError)
+      res
+        .status(500)
+        .json({ message: formatError(err?.message), code: err.code });
+    else {
+      req.session.ftp = req.query;
+      // res.json(req.query);
+      res.redirect(302, "/");
+    }
+  });
+};
+
 
 /** 上传文件 */
 ftps.upload = function (req, res, next) {
@@ -93,7 +133,38 @@ ftps.upload = function (req, res, next) {
     }
   );
 };
+/** 重构上传文件 */
+ftps.newupload = async function (req, res, next) {
+  const files = Array.isArray(req.files.file) ? req.files.file : [req.files.file];
+  let ftp;
 
+  try {
+    ftp = new Jsftp(req.session.ftp);
+
+    for (const file of files) {
+      const filePath = file.path;
+      const filename = file.originalFilename;
+      const fileData = await fspromises.readFile(filePath);
+
+      await new Promise((resolve, reject) => {
+        ftp.put(fileData, req.body.dir + filename, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+
+    res.json({ message: "Upload success" });
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({ 
+      message: formatError(err.message), 
+      code: err.code 
+    });
+  } finally {
+    if (ftp) quitConn(ftp);
+  }
+};
 /** 获取文件列表 */
 ftps.list = function (req, res, next) {
   try {
@@ -188,6 +259,7 @@ ftps.download = function (req, res, next) {
     }
   });
 };
+
 
 /** 重命名 */
 ftps.rename = function (req, res, next) {

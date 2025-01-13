@@ -40,12 +40,9 @@ npm install
 npm start 或 node index.js
 ```
 
-## 注意事项
+## 修改内容
+与原来的项目相比，修改了一些bug ，也增加了自动适应上传库的问题
 
-### 上传文件
+ 
 
-上传文件时使用 `$.ajax()` 携带 formData 参数发送 post 请求，但在新版本的 Node.js 中可能会出现报错：
 
-`TypeError: os.tmpDir is not a function`
-
-这是因为在新版本的 Node.js 中 `os.tmpDir()` 已被弃用，要找到指定位置将其修改为 `os.tmpdir()`

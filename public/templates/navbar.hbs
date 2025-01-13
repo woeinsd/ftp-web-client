@@ -17,9 +17,11 @@
         <span class="icon-bar"></span>
       </button>
     {{/if}}
-
-    <a class="navbar-brand" href="#" style="color:white">FTP 客户端</a>
-    {{#if ftp}}
+    
+    <a class="navbar-brand" style="color:white">
+      
+    </a>
+     {{#if ftp}}
       <a
         href="./"
         class="visible-xs pull-right"
@@ -48,7 +50,7 @@
           </a>
         </li>
         <li>
-          <a href="#" class="signout" style="color:white">
+          <a href="#" class="signout" style="color:white; display:none;"> <!-- 添加 display:none; -->
             <i class="fa fa-sign-out"></i>
             退出登录
           </a>

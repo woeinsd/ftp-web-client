@@ -242,6 +242,7 @@ var FtpListView = Backbone.View.extend({
     "click .action": "Action",
     "click .delete": "delete",
     "contextmenu .list-row": "contextMenu",
+    "click .desktop": "desktop",
   },
 
   /** 菜单 */
@@ -316,17 +317,20 @@ var FtpListView = Backbone.View.extend({
   goToPath: function (event) {
     var data = $(event.currentTarget).data();
     var dirs = this.model.get("dirs") || [];
+    console.log("dirs",dirs);
     dirs = JSON.parse(JSON.stringify(dirs));
     dirs.pop();
     if (data.index >= 0) {
       var dir = "";
       for (var i = 0; i <= data.index; i++) {
         dir += dirs[i] + "/";
+        console.log("dir",dir);
       }
       this.model.set("dir", dir);
       this.render();
     }
   },
+ 
 
   /** 返回上一级 */
   back: function () {
@@ -336,6 +340,46 @@ var FtpListView = Backbone.View.extend({
     else dirs = [];
     this.model.set("dir", dirs.join("/") + "/");
     this.render();
+  },
+    /**桌面 */
+  desktop: function () {
+    var user =window.App.User["user"];
+      
+    if (user) {
+      
+      console.log("获取到用户名",user);
+      
+      var homepath="/home/" + user + "/";
+      var data = {
+        dir:homepath 
+      };
+      $.ajax({
+        url: "/api/ftp/list",
+        type: "POST",
+        data: { dir: homepath },
+        dataType: "json",
+        success: function(data) {
+          var desktopDir = data.ftpdirlist.find(item => 
+            item.name === "Desktop" || item.name === "桌面"
+          );
+          if (desktopDir) {
+            homepath += desktopDir.name + "/";
+          }
+          sessionStorage.setItem("currentDir", homepath);
+          this.model.set("dir", homepath);
+          this.render();
+        }.bind(this),
+        error: function(jqXHR, textStatus, errorThrown) {
+          console.error("获取目录失败:", textStatus, errorThrown);
+          this.model.set("dir", sessionStorage.getItem("currentDir") || "/");
+          this.render();
+        }.bind(this)
+      });
+    } else {
+      console.warn("未能获取用户名，使用默认路径");
+      this.model.set("dir", sessionStorage.getItem("currentDir") || "/");
+      this.render();
+  }
   },
 
   /** 新建目录 */
@@ -387,35 +431,73 @@ var FtpListView = Backbone.View.extend({
   postRender: function () {
     var that = this;
     // 自定义submit方法
-    var onsubmit = (el) => {
-      var formData = new FormData(el);
+    var onsubmit = (formData) => {
+      // 创建进度条元素
+      var progressBar = $('<div class="progress"><div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%"></div></div>');
+      that.$el.prepend(progressBar); // 将进度条添加到页面
 
       var request = $.ajax({
         url: "/api/ftp/upload",
         type: "POST",
         data: formData,
-        async: false,
+        async: true,
         cache: false,
         contentType: false,
         processData: false,
+        xhr: function() {
+          var xhr = new window.XMLHttpRequest();
+          xhr.upload.addEventListener("progress", function(evt) {
+            if (evt.lengthComputable) {
+              var percentComplete = evt.loaded / evt.total;
+              percentComplete = parseInt(percentComplete * 100);
+              progressBar.find('.progress-bar').width(percentComplete + '%');
+              progressBar.find('.progress-bar').text(percentComplete + '%');
+            }
+          }, false);
+          return xhr;
+        }
       });
 
       request.success(function () {
-        window.App.flash("Upload success ", "success");
+        window.App.flash("上传成功", "success");
+        progressBar.remove();
         that.render();
       });
 
       request.error(function (jqXHR) {
         window.App.flash(
-          jqXHR.responseJSON?.message || "Something went wrong",
+          jqXHR.responseJSON?.message || "出现错误",
           "error"
         );
+        progressBar.remove();
       });
     };
 
     // 选中文件后自动提交
     this.$el.find("input:file").change(function (event) {
-      onsubmit(event.currentTarget.parentElement.parentElement);
+      var formData = new FormData(event.currentTarget.parentElement.parentElement);
+      onsubmit(formData);
+    });
+
+    // 添加拖放上传功能
+    var fileDropArea = document.getElementById('fileDropArea');
+    
+    fileDropArea.addEventListener('dragover', function(event) {
+      event.preventDefault(); // 防止默认行为以允许拖放
+    });
+
+    fileDropArea.addEventListener('drop', function(event) {
+      event.preventDefault(); // 防止默认行为
+      const files = event.dataTransfer.files; // 获取拖放的文件
+      const formData = new FormData(); // 创建新的 FormData 对象
+      formData.append("dir", sessionStorage.getItem("currentDir"));
+      console.log("dir", sessionStorage.getItem("currentDir"));
+      for (let i = 0; i < files.length; i++) {
+        formData.append('file', files[i]); // 将文件添加到 FormData
+      }
+      
+      // 复用onsubmit方法
+      onsubmit(formData); // 直接调用onsubmit方法
     });
   },
 
@@ -586,11 +668,27 @@ var FtpListView = Backbone.View.extend({
       path,
     };
 
+    // 创建进度条元素
+    var progressBar = $('<div class="progress"><div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%"></div></div>');
+    $('#progressBarContainer').html(progressBar);
+
     var request = $.ajax({
       url: "/api/ftp/download",
       type: "POST",
       data,
       responseType: "arraybuffer",
+      xhr: function() {
+        var xhr = new window.XMLHttpRequest();
+        xhr.addEventListener("progress", function(evt) {
+          if (evt.lengthComputable) {
+            var percentComplete = evt.loaded / evt.total;
+            percentComplete = parseInt(percentComplete * 100);
+            progressBar.find('.progress-bar').width(percentComplete + '%');
+            progressBar.find('.progress-bar').text(percentComplete + '%');
+          }
+        }, false);
+        return xhr;
+      }
     });
 
     request.success(function (result) {
@@ -602,24 +700,27 @@ var FtpListView = Backbone.View.extend({
           type,
         });
         window.App.flash(
-          (type == 1 ? "Copy" : "Shear") + " success",
-          "success"
+          (type == 1 ? "复制" : "剪切") + "成功",
+          "成功"
         );
         document.querySelector(".paste").className =
           "btn btn-xs btn-warning paste";
       } else {
         saveAs(blob, name);
-        window.App.flash("Download success", "success");
+        window.App.flash("下载成功", "success");
       }
+      $('#progressBarContainer').empty();
     });
 
     request.error(function (jqXHR) {
       window.App.flash(
-        jqXHR.responseJSON?.message || "Something went wrong",
+        jqXHR.responseJSON?.message || "出现错误",
         "error"
       );
+      $('#progressBarContainer').empty();
     });
   },
+
 
   /** 将字符串转为buffer对象 */
   binaryStringToBuffer(binaryStr) {
@@ -651,16 +752,12 @@ var FtpListView = Backbone.View.extend({
     var menu = this.menu,
       style = menu.style;
     style.display = "block";
-    if (event.clientX + menu.scrollWidth > window.innerWidth)
-      style.left = event.clientX - menu.scrollWidth + "px";
-    else style.left = event.clientX + "px";
-    if (event.clientY + menu.scrollHeight > window.innerHeight)
-      style.top = event.clientY - menu.scrollHeight + "px";
-    else style.top = event.clientY + "px";
-
+    
+    
     var data = $(event.currentTarget).data();
+    // console.log("data",data);
     var ul = menu.getElementsByTagName("ul")[0];
-
+    // console.log("ul",ul);
     // 移除所有菜单
     ul.innerHTML = "";
 
@@ -729,6 +826,41 @@ var FtpListView = Backbone.View.extend({
         ul.appendChild(li);
       }
     }
+     // 计算菜单位置
+     var scrollX = window.scrollX || document.documentElement.scrollLeft;
+     var scrollY = window.scrollY || document.documentElement.scrollTop;
+     style.left = (event.clientX - scrollX) + "px";
+     style.top = (event.clientY + scrollY ) + "px";
+     console.log("鼠标点击位置",event.clientX,event.clientY,"页面scrollxy位置",scrollX,scrollY);
+     console.log("计算后的位置",style.left,style.top);
+     // 获取菜单的宽度和高度
+     const menuWidth = menu.scrollWidth;
+     const menuHeight = menu.scrollHeight;
+     console.log("获取菜单的宽度和高度",menuWidth,menuHeight);
+     // 确保菜单不会超出窗口边界
+     if (event.clientX + menuWidth > window.innerWidth) {
+       style.left = window.innerWidth - menuWidth + "px"; 
+       console.log("right",style.left); // 调整到窗口右边界
+     }
+ 
+
+     if (event.clientY + menuHeight > window.innerHeight) {
+       style.top = (parseInt(style.top) - menu.scrollHeight-5) + "px";
+       console.log("bottom",style.top,"菜单的高度获取：",menu.scrollHeight,menuHeight); // 调整到窗口下边界
+     }
+ 
+     // 如果菜单高度超过可视区域，调整为可视区域的顶部
+     if (event.clientY + menuHeight > window.innerHeight) {
+       
+       style.left= (parseInt(style.left)+5) + "px";
+       console.log("菜单高度超过可视区域",window.innerHeight,menuHeight,style.top);
+     }
+     // // 如果菜单高度小于鼠标位置，调整为鼠标位置的上方
+     // if (event.clientY < menuHeight) {
+     //   style.top = "10px"; // 留出一些间距
+     //   console.log("菜单高度小于鼠标位置",style.top);
+     // }
+  
   },
 });
 
@@ -739,6 +871,7 @@ var NavBarView = Backbone.View.extend({
   /** 绑定点击事件 */
   events: {
     "click .signout": "Logout",
+    "click .navbar-brand": "goOutPath",
   },
 
   /** 初始化 */
@@ -754,6 +887,11 @@ var NavBarView = Backbone.View.extend({
         this.$el.html(html);
       }.bind(this)
     );
+  },
+   /** 跳转外链清空sessionStorage 中的 currentDir */
+  goOutPath: function (event) {
+     window.sessionStorage.removeItem("currentDir");
+     window.location.reload();
   },
 
   /** 退出登录 */
